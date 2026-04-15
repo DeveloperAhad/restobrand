@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - restobrand_network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - restobrand_network
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
+    environment:
+      DJANGO_DEBUG: "False"
+      POSTGRES_HOST: db
+      REDIS_HOST: redis
+    networks:
+      - restobrand_network
+    restart: unless-stopped
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_HOST: redis
+    networks:
+      - restobrand_network
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=info
+
+volumes:
+  postgres_data_prod:
+
+networks:
+  restobrand_network:
+    driver: bridge
